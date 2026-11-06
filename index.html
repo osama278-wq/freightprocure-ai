@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FreightProcure AI: Singapore to Oman Corridor</title>
+<meta name="description" content="Client-side LCL ocean freight procurement and decision engine for the Singapore to Sohar / Muscat corridor." />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  if (window.tailwind) {
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'] }
+        }
+      }
+    };
+  }
+</script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root { --ink:#0f172a; }
+  html { scroll-behavior: smooth; }
+  body { font-feature-settings: "tnum" 1, "cv11" 1; }
+  .num { font-variant-numeric: tabular-nums; }
+  [data-lucide] { width: 1em; height: 1em; stroke-width: 2; display: inline-block; vertical-align: -0.125em; }
+
+  /* Badges */
+  .badge { display:inline-flex; align-items:center; gap:.25rem; font-size:.6875rem; font-weight:600; line-height:1; padding:.3rem .5rem; border-radius:9999px; white-space:nowrap; }
+  .badge-risk-1 { background:#d1fae5; color:#065f46; }
+  .badge-risk-2 { background:#ecfdf5; color:#047857; box-shadow: inset 0 0 0 1px #a7f3d0; }
+  .badge-risk-3 { background:#fef3c7; color:#92400e; }
+  .badge-risk-4 { background:#fee2e2; color:#991b1b; }
+  .badge-top { background: linear-gradient(90deg,#4f46e5,#059669); color:#fff; }
+  .chip-seller { background:#f1f5f9; color:#334155; }
+  .chip-bundled { background:#e0e7ff; color:#3730a3; }
+  .chip-separate { background:#fef3c7; color:#92400e; }
+
+  /* Tooltips */
+  .tip { position: relative; cursor: help; }
+  .tip::after {
+    content: attr(data-tip); position:absolute; left:50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px);
+    width: max-content; max-width: 260px; white-space: normal; text-align:left;
+    background:#0f172a; color:#f8fafc; font-size:.72rem; font-weight:500; line-height:1.35;
+    padding:.5rem .65rem; border-radius:.5rem; box-shadow:0 10px 25px -5px rgba(15,23,42,.35);
+    opacity:0; pointer-events:none; transition: opacity .15s ease, transform .15s ease; z-index:60;
+  }
+  .tip:hover::after, .tip:focus-visible::after { opacity:1; transform: translateX(-50%) translateY(0); }
+
+  /* Segmented / toggles */
+  .seg-btn[aria-pressed="true"] { background:#4f46e5; color:#fff; border-color:#4f46e5; box-shadow:0 1px 2px rgba(79,70,229,.35); }
+  .inc-card[aria-checked="true"] { border-color:#4f46e5; background:#eef2ff; box-shadow: 0 0 0 1px #4f46e5; }
+  .switch { position:relative; width:2.5rem; height:1.4rem; background:#cbd5e1; border-radius:9999px; transition: background .15s; flex-shrink:0; }
+  .switch::after { content:""; position:absolute; top:.2rem; left:.2rem; width:1rem; height:1rem; background:#fff; border-radius:9999px; transition: transform .15s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  input:checked + .switch { background:#4f46e5; }
+  input.danger:checked + .switch { background:#dc2626; }
+  input:checked + .switch::after { transform: translateX(1.1rem); }
+  input:focus-visible + .switch { outline: 2px solid #818cf8; outline-offset: 2px; }
+
+  /* Range */
+  input[type=range] { accent-color:#4f46e5; }
+
+  /* Table */
+  .matrix-row { transition: background .12s; }
+  .matrix-row:hover { background:#f8fafc; }
+  .matrix-row.is-selected { background:#eef2ff; }
+  .matrix-row.is-selected td:first-child { box-shadow: inset 3px 0 0 #4f46e5; }
+
+  /* Scrollbars */
+  .thin-scroll::-webkit-scrollbar { height:8px; width:8px; }
+  .thin-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; }
+
+  /* Free time clock cells */
+  .day-cell { height:1.75rem; border-radius:.35rem; display:flex; align-items:center; justify-content:center; font-size:.65rem; font-weight:600; }
+
+  /* Modal */
+  .modal-enter { animation: modalIn .18s ease-out; }
+  @keyframes modalIn { from { opacity:0; transform: translateY(12px) scale(.98); } to { opacity:1; transform:none; } }
+
+  .route-dash { background-image: linear-gradient(90deg, rgba(255,255,255,.55) 50%, transparent 50%); background-size: 10px 2px; background-repeat: repeat-x; height:2px; }
+
+  @media print {
+    header, #panelA, #rfqModal, .no-print { display:none !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+
+<!-- ============================ HEADER ============================ -->
+<header class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white">
+  <div class="max-w-[1500px] mx-auto px-4 sm:px-6 py-5">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="h-11 w-11 rounded-xl bg-indigo-500/20 ring-1 ring-indigo-400/40 flex items-center justify-center text-indigo-300 text-xl">
+          <i data-lucide="ship"></i>
+        </div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold tracking-tight">FreightProcure <span class="text-emerald-400">AI</span></h1>
+          <p class="text-slate-400 text-sm">Autonomous LCL Procurement &amp; Decision Engine · Singapore → Oman Corridor</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs" id="headerKpis"><!-- dynamic --></div>
+    </div>
+
+    <!-- Corridor -->
+    <div class="mt-5 grid grid-cols-1 md:grid-cols-12 gap-4">
+      <div class="md:col-span-7 rounded-xl bg-white/5 ring-1 ring-white/10 p-4">
+        <div class="flex items-center justify-between gap-2 text-center">
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-widest text-slate-400">Origin</div>
+            <div class="font-semibold">Singapore</div>
+            <div class="text-[11px] text-slate-400">Port of Singapore · Jurong CFS</div>
+          </div>
+          <div class="flex-1 px-1 sm:px-3">
+            <div class="text-[11px] text-indigo-300 mb-1 flex items-center justify-center gap-1"><i data-lucide="waves"></i> LCL sea · <span id="hdrP2P" class="num">12–19 d</span></div>
+            <div class="route-dash"></div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-widest text-slate-400">Discharge</div>
+            <div class="font-semibold">Sohar / PSQ</div>
+            <div class="text-[11px] text-slate-400">Sohar Port · Port Sultan Qaboos</div>
+          </div>
+          <div class="flex-1 px-1 sm:px-3 max-w-[110px]">
+            <div class="text-[11px] text-emerald-300 mb-1 flex items-center justify-center gap-1"><i data-lucide="truck"></i> Linehaul</div>
+            <div class="route-dash"></div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-widest text-slate-400">Delivery</div>
+            <div class="font-semibold">Muscat</div>
+            <div class="text-[11px] text-slate-400">Door · <span id="hdrD2D" class="num">18–27 d</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="md:col-span-5 rounded-xl bg-white/5 ring-1 ring-white/10 p-4 text-sm">
+        <div class="flex items-start gap-2">
+          <i data-lucide="package" class="text-emerald-300 mt-0.5"></i>
+          <div class="min-w-0">
+            <div class="font-semibold">Industrial Pneumatic Equipment — Valves, Cylinders, Tubing</div>
+            <div class="text-slate-400 text-xs">Non-hazardous machinery parts · ISPM-15 pallets</div>
+            <div class="mt-2 flex flex-wrap gap-1.5" id="hsChips"></div>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-white/10 text-xs text-slate-300 flex flex-wrap gap-x-4 gap-y-1">
+          <span><i data-lucide="landmark"></i> Duty 5% on CIF</span>
+          <span><i data-lucide="receipt"></i> VAT 5% on CIF + Duty + Bayan</span>
+          <span><i data-lucide="file-badge"></i> Bayan OMR 15.000 = $39.00</span>
+          <span><i data-lucide="repeat"></i> 1 OMR = 2.60 USD</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1500px] mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+  <!-- ============================ PANEL A ============================ -->
+  <aside id="panelA" class="lg:col-span-4 xl:col-span-3 space-y-5">
+
+    <!-- Cargo -->
+    <section class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold text-slate-900 flex items-center gap-2"><i data-lucide="sliders-horizontal" class="text-indigo-600"></i> Cargo Parameters</h2>
+        <button id="btnPreset" class="text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+          <i data-lucide="rotate-ccw"></i> 2 Plt | 265 kg | 1.76 CBM
+        </button>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <label class="block">
+          <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Pallets</span>
+          <input id="inPallets" type="number" min="1" step="1" value="2" class="mt-1 w-full rounded-lg border-slate-300 border px-2.5 py-2 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Gross kg</span>
+          <input id="inKg" type="number" min="1" step="0.01" value="265" class="mt-1 w-full rounded-lg border-slate-300 border px-2.5 py-2 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Volume CBM</span>
+          <input id="inCbm" type="number" min="0.01" step="0.01" value="1.76" class="mt-1 w-full rounded-lg border-slate-300 border px-2.5 py-2 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+      </div>
+
+      <div id="rtBox" class="mt-4 rounded-xl bg-slate-50 ring-1 ring-slate-200 p-3"><!-- dynamic --></div>
+
+      <details class="mt-4 group">
+        <summary class="cursor-pointer text-xs font-medium text-slate-600 flex items-center gap-1 select-none">
+          <i data-lucide="ruler"></i> Pallet dimensions (for RFQ)
+          <i data-lucide="chevron-down" class="ml-auto transition group-open:rotate-180"></i>
+        </summary>
+        <div class="mt-3 grid grid-cols-3 gap-2">
+          <label class="block"><span class="text-[11px] text-slate-500">L (cm)</span><input id="inL" type="number" min="1" value="120" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+          <label class="block"><span class="text-[11px] text-slate-500">W (cm)</span><input id="inW" type="number" min="1" value="100" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+          <label class="block"><span class="text-[11px] text-slate-500">H (cm)</span><input id="inH" type="number" min="1" value="73" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-xs">
+          <span id="dimCheck" class="text-slate-500"></span>
+          <button id="btnApplyDims" class="text-indigo-700 font-medium hover:underline">Apply to volume</button>
+        </div>
+      </details>
+    </section>
+
+    <!-- Incoterms -->
+    <section class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2 mb-3"><i data-lucide="scale" class="text-indigo-600"></i> Incoterms Simulator</h2>
+      <div class="space-y-2" role="radiogroup" aria-label="Incoterm scenario" id="incotermGroup"><!-- dynamic --></div>
+
+      <div class="mt-4">
+        <div class="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+          Ancillary cost estimate
+          <span class="tip text-slate-400" tabindex="0" data-tip="Origin pickup ($80–120), CFS receiving ($70–90), export docs ($110–130), Muscat linehaul ($120–160) and Sohar clearance ($90–140) are ranges. Pick the end of the range to budget against."><i data-lucide="info"></i></span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5" id="bandGroup">
+          <button class="seg-btn border border-slate-300 rounded-lg py-1.5 text-xs font-medium" data-band="low" aria-pressed="false">Low</button>
+          <button class="seg-btn border border-slate-300 rounded-lg py-1.5 text-xs font-medium" data-band="mid" aria-pressed="true">Mid</button>
+          <button class="seg-btn border border-slate-300 rounded-lg py-1.5 text-xs font-medium" data-band="high" aria-pressed="false">High</button>
+        </div>
+      </div>
+
+      <label class="mt-4 flex items-center justify-between gap-3 cursor-pointer">
+        <span class="text-sm text-slate-700">Apply carrier W/M minimums
+          <span class="block text-[11px] text-slate-500">Maersk &amp; DSV bill a 2 RT floor; others 1 RT</span>
+        </span>
+        <input id="inMin" type="checkbox" class="sr-only" />
+        <span class="switch"></span>
+      </label>
+    </section>
+
+    <!-- Customs -->
+    <section class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2 mb-3"><i data-lucide="landmark" class="text-indigo-600"></i> Oman Border Taxes</h2>
+      <div class="grid grid-cols-2 gap-3">
+        <label class="block">
+          <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Invoice value (USD)</span>
+          <input id="inInvoice" type="number" min="0" step="100" value="10000" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-[11px] font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">Insurance %
+            <span class="tip text-slate-400" tabindex="0" data-tip="Notional insurance included in the customs CIF valuation basis. Set to 0 if your invoice is already CIF."><i data-lucide="info"></i></span>
+          </span>
+          <input id="inIns" type="number" min="0" max="5" step="0.1" value="0.5" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+      </div>
+      <div id="taxBox" class="mt-4 text-sm"><!-- dynamic --></div>
+    </section>
+
+    <!-- Value weights -->
+    <section class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+      <h2 class="font-semibold text-slate-900 flex items-center gap-2 mb-1"><i data-lucide="gauge" class="text-indigo-600"></i> Best-Value Weights</h2>
+      <p class="text-xs text-slate-500 mb-3">Min–max normalised across all 14 providers, then weighted.</p>
+      <div class="space-y-3 text-sm">
+        <label class="block"><div class="flex justify-between"><span>Landed cost</span><span id="wCostLbl" class="num font-medium text-slate-900">50</span></div><input id="wCost" type="range" min="0" max="100" value="50" class="w-full" /></label>
+        <label class="block"><div class="flex justify-between"><span>Door-to-door speed</span><span id="wTimeLbl" class="num font-medium text-slate-900">30</span></div><input id="wTime" type="range" min="0" max="100" value="30" class="w-full" /></label>
+        <label class="block"><div class="flex justify-between"><span>Surcharge risk</span><span id="wRiskLbl" class="num font-medium text-slate-900">20</span></div><input id="wRisk" type="range" min="0" max="100" value="20" class="w-full" /></label>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ============================ RIGHT COLUMN ============================ -->
+  <div class="lg:col-span-8 xl:col-span-9 space-y-6 min-w-0">
+
+    <!-- ============================ PANEL B ============================ -->
+    <section id="panelB" class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200">
+      <div class="p-5 border-b border-slate-200 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+        <div>
+          <h2 class="font-semibold text-slate-900 flex items-center gap-2"><i data-lucide="list-ordered" class="text-indigo-600"></i> Ranked Forwarder Matrix</h2>
+          <p class="text-xs text-slate-500" id="matrixSub"></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="relative">
+            <i data-lucide="search" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <input id="inSearch" type="search" placeholder="Filter forwarders…" class="pl-8 pr-3 py-1.5 text-sm rounded-lg border border-slate-300 w-44 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div class="inline-flex rounded-lg overflow-hidden" id="sortGroup" role="group" aria-label="Sort">
+            <button class="seg-btn border border-slate-300 px-3 py-1.5 text-xs font-medium rounded-l-lg flex items-center gap-1" data-sort="cost" aria-pressed="true"><i data-lucide="badge-dollar-sign"></i> Lowest Total Cost</button>
+            <button class="seg-btn border-y border-slate-300 px-3 py-1.5 text-xs font-medium flex items-center gap-1" data-sort="time" aria-pressed="false"><i data-lucide="timer"></i> Fastest Transit</button>
+            <button class="seg-btn border border-slate-300 px-3 py-1.5 text-xs font-medium rounded-r-lg flex items-center gap-1" data-sort="value" aria-pressed="false"><i data-lucide="sparkles"></i> Best Value</button>
+          </div>
+          <button id="btnCsv" class="no-print text-xs font-medium text-slate-700 border border-slate-300 hover:bg-slate-50 px-3 py-1.5 rounded-lg flex items-center gap-1"><i data-lucide="download"></i> CSV</button>
+        </div>
+      </div>
+
+      <div id="recBanner" class="px-5 pt-5"><!-- dynamic --></div>
+
+      <div class="overflow-x-auto thin-scroll px-2 sm:px-5 pb-5 pt-3">
+        <table class="w-full min-w-[980px] text-sm">
+          <thead>
+            <tr class="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
+              <th class="py-2 pl-3 pr-2 w-10">#</th>
+              <th class="py-2 px-2">Forwarder</th>
+              <th class="py-2 px-2">Booking</th>
+              <th class="py-2 px-2 text-right">Ocean</th>
+              <th class="py-2 px-2 text-right">Logistics</th>
+              <th class="py-2 px-2 text-right">Duty + VAT</th>
+              <th class="py-2 px-2 text-right">Total Landed</th>
+              <th class="py-2 px-2">Transit (P2P / D2D)</th>
+              <th class="py-2 px-2">Risk</th>
+              <th class="py-2 px-2 text-right">Value</th>
+              <th class="py-2 pl-2 pr-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="matrixBody"><!-- dynamic --></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================ PANEL C ============================ -->
+    <section id="panelC" class="grid grid-cols-1 2xl:grid-cols-5 gap-6">
+      <!-- Breakdown -->
+      <div class="2xl:col-span-3 bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5 min-w-0">
+        <div id="detailHead"><!-- dynamic --></div>
+        <div id="stackBar" class="mt-4"><!-- dynamic --></div>
+        <div class="mt-4 overflow-x-auto thin-scroll">
+          <table class="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr class="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2">Cost line</th>
+                <th class="py-2 px-2">Liability</th>
+                <th class="py-2 pl-2 text-right">USD</th>
+              </tr>
+            </thead>
+            <tbody id="breakdownBody"><!-- dynamic --></tbody>
+          </table>
+        </div>
+
+        <h3 class="mt-6 font-semibold text-slate-900 text-sm flex items-center gap-2"><i data-lucide="handshake" class="text-indigo-600"></i> Incoterm Cost Responsibility</h3>
+        <div class="mt-2 overflow-x-auto thin-scroll">
+          <table class="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr class="text-left text-[11px] uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                <th class="py-2 pr-2">Activity</th>
+                <th class="py-2 px-2">Paid by</th>
+                <th class="py-2 pl-2">Note</th>
+              </tr>
+            </thead>
+            <tbody id="respBody"><!-- dynamic --></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Hidden Fee Shield -->
+      <div class="2xl:col-span-2 space-y-5 min-w-0">
+        <div class="bg-white rounded-2xl shadow-sm ring-1 ring-slate-200 p-5">
+          <h3 class="font-semibold text-slate-900 flex items-center gap-2"><i data-lucide="shield-alert" class="text-rose-600"></i> Hidden Fee &amp; Demurrage Shield</h3>
+          <div id="riskNote" class="mt-3"><!-- dynamic --></div>
+
+          <!-- CFS Handover Trap -->
+          <div class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <div class="flex items-start gap-2">
+              <i data-lucide="triangle-alert" class="text-amber-600 mt-0.5"></i>
+              <div class="min-w-0">
+                <div class="font-semibold text-amber-900 text-sm">The CFS Handover Trap</div>
+                <p class="text-xs text-amber-800 mt-0.5">Beware quotes advertising $10–15/CBM ocean rates that recover margin through ~$80/CBM destination stripping at Sohar CFS. Audit a competing quote:</p>
+              </div>
+            </div>
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <label class="block"><span class="text-[10px] font-medium text-amber-900 uppercase">Ocean $/CBM</span><input id="auOcean" type="number" min="0" step="0.5" value="12" class="mt-1 w-full rounded-md border border-amber-300 bg-white px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-amber-500" /></label>
+              <label class="block"><span class="text-[10px] font-medium text-amber-900 uppercase">Strip $/CBM</span><input id="auStrip" type="number" min="0" step="1" value="80" class="mt-1 w-full rounded-md border border-amber-300 bg-white px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-amber-500" /></label>
+              <label class="block"><span class="text-[10px] font-medium text-amber-900 uppercase">DO fee $</span><input id="auDo" type="number" min="0" step="1" value="95" class="mt-1 w-full rounded-md border border-amber-300 bg-white px-2 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-amber-500" /></label>
+            </div>
+            <div id="auditOut" class="mt-3 text-xs"><!-- dynamic --></div>
+          </div>
+
+          <!-- Free time clock -->
+          <div class="mt-4 rounded-xl border border-slate-200 p-4">
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-semibold text-slate-900 text-sm flex items-center gap-2"><i data-lucide="alarm-clock" class="text-indigo-600"></i> CFS Free-Time Clock</div>
+              <div class="inline-flex rounded-md overflow-hidden" id="demBandGroup">
+                <button class="seg-btn border border-slate-300 px-2 py-1 text-[11px] font-medium rounded-l-md" data-dem="low" aria-pressed="true">$6.50</button>
+                <button class="seg-btn border border-slate-300 px-2 py-1 text-[11px] font-medium rounded-r-md -ml-px" data-dem="high" aria-pressed="false">$13.00</button>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Standard 3–5 days free time at Sohar CFS before daily demurrage kicks in ($6.50–$13.00/CBM/day).</p>
+            <div class="mt-3 grid grid-cols-2 gap-3 text-sm">
+              <label class="block"><span class="text-[11px] text-slate-500">Free days</span>
+                <select id="inFree" class="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="3">3 days</option><option value="4" selected>4 days</option><option value="5">5 days</option>
+                </select>
+              </label>
+              <label class="block"><span class="text-[11px] text-slate-500">Expected dwell: <b id="dwellLbl" class="num text-slate-800">6</b> days</span>
+                <input id="inDwell" type="range" min="0" max="21" value="6" class="w-full mt-2.5" />
+              </label>
+            </div>
+            <div id="clockGrid" class="mt-3 grid grid-cols-7 gap-1"><!-- dynamic --></div>
+            <div id="clockOut" class="mt-3 text-sm"><!-- dynamic --></div>
+          </div>
+
+          <!-- CISF -->
+          <div class="mt-4 rounded-xl border border-slate-200 p-4">
+            <label class="flex items-center justify-between gap-3 cursor-pointer">
+              <span class="text-sm">
+                <span class="font-semibold text-slate-900 flex items-center gap-2"><i data-lucide="flag" class="text-rose-600"></i> CISF Alert</span>
+                <span class="block text-xs text-slate-500">Quote from <b id="cisfName">—</b> includes a China/Asia Import Service Fee not agreed in the RFQ</span>
+              </span>
+              <input id="inCisf" type="checkbox" class="sr-only danger" />
+              <span class="switch"></span>
+            </label>
+            <div id="cisfAmtWrap" class="mt-3 hidden">
+              <label class="block text-xs text-slate-600">CISF amount on quote (USD)
+                <input id="inCisfAmt" type="number" min="0" step="1" value="45" class="mt-1 w-full rounded-lg border border-rose-300 px-2.5 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-rose-500" />
+              </label>
+            </div>
+            <div id="cisfOut" class="mt-3 text-xs"><!-- dynamic --></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <p class="text-[11px] text-slate-500 leading-relaxed">
+      Rates are the embedded procurement baseline for budgeting and RFQ preparation, not binding quotations. Landed logistics baselines are reconciled at 1.76 CBM; the residual between baseline and (ocean + local charges) is modelled as each forwarder's door-delivery &amp; clearance bundle. Statutory duty and VAT are estimates based on the stated Oman rules; confirm the final assessment with your Bayan broker.
+    </p>
+  </div>
+</main>
+
+<!-- ============================ RFQ MODAL ============================ -->
+<div id="rfqModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" data-close="1"></div>
+  <div class="relative h-full w-full flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none">
+    <div role="dialog" aria-modal="true" aria-labelledby="rfqTitle" class="modal-enter pointer-events-auto bg-white w-full sm:max-w-3xl max-h-[95vh] sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+        <div class="min-w-0">
+          <h2 id="rfqTitle" class="font-semibold text-slate-900 flex items-center gap-2"><i data-lucide="mail" class="text-indigo-600"></i> Automated RFQ</h2>
+          <p id="rfqSub" class="text-xs text-slate-500 truncate"></p>
+        </div>
+        <button class="text-slate-500 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 text-lg" data-close="1" aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
+      <div class="px-5 py-4 overflow-y-auto thin-scroll space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">Your name</span><input id="rqName" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+          <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">Company</span><input id="rqCompany" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+          <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">Reply-by (days)</span><input id="rqDays" type="number" min="1" max="30" value="3" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm num focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+        </div>
+        <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">To</span><input id="rqTo" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+        <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">Subject</span><input id="rqSubject" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></label>
+        <label class="block"><span class="text-[11px] font-medium text-slate-500 uppercase">Body (editable)</span><textarea id="rqBody" rows="18" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-[13px] font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea></label>
+      </div>
+      <div class="px-5 py-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        <span id="rqStatus" class="text-xs text-emerald-700 font-medium"></span>
+        <div class="flex flex-wrap gap-2">
+          <button id="rqCopy" class="text-sm font-medium border border-slate-300 hover:bg-slate-50 px-3.5 py-2 rounded-lg flex items-center gap-1.5"><i data-lucide="clipboard-copy"></i> Copy to Clipboard</button>
+          <a id="rqMailto" href="#" class="text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg flex items-center gap-1.5"><i data-lucide="send"></i> Open in Mail App</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   FreightProcure AI — Singapore → Oman LCL Decision Engine
+   Pure client-side ES6. No backend, no API keys.
+   ===================================================================== */
+
+const CONFIG = Object.freeze({
+  OMR_USD: 2.60,
+  BAYAN_OMR: 15.000,
+  DUTY_RATE: 0.05,
+  VAT_RATE: 0.05,
+  BASELINE: { pallets: 2, kg: 265, cbm: 1.76, dims: { l: 120, w: 100, h: 73 } },
+  ORIGIN: { pickup: [80, 120], cfs: [70, 90], docs: [110, 130] },
+  DEST:   { linehaul: [120, 160], clearance: [90, 140] },
+  DEMURRAGE: { low: 6.50, high: 13.00 }
+});
+const BAYAN_USD = +(CONFIG.BAYAN_OMR * CONFIG.OMR_USD).toFixed(2); // 39.00
+
+const HS_CODES = [
+  { code: '8481.20.0000', desc: 'Pneumatic transmission valves' },
+  { code: '8481.80.0000', desc: 'Directional control valves' },
+  { code: '8412.31.0000', desc: 'Pneumatic cylinders & actuators' },
+  { code: '7304.39.0000', desc: 'Seamless steel tubing' },
+  { code: '3917.32.0000', desc: 'Extruded polymer pneumatic hose' }
+];
+
+const RISK_LABEL = { 1: 'Very Low', 2: 'Low', 3: 'Moderate', 4: 'High' };
+
+const FREIGHT_DATA = [
+  { id: 'clarion', name: 'Clarion Shipping Services', rate: 26.00, local: 405.00, baseline: 685.76, p2p: [14, 17], d2d: [20, 24],
+    booking: 'Regional RFQ / Email Desk', emails: ['sales@clarionshipping.com.sg', 'clarion@omantel.net.om'], phones: ['+65 6220 6272', '+968 2478 1106'],
+    risk: 4, riskNote: 'High JAFZA cross-dock risk if transshipped via Dubai.', tag: 'Lowest base ocean rate on the lane', minRT: 1 },
+  { id: 'cwt', name: 'CWT Globelink', rate: 28.50, local: 415.00, baseline: 715.16, p2p: [13, 16], d2d: [19, 23],
+    booking: 'Schedule Portal / Email Desk', emails: ['GLSGsales@sg.cwt-globelink.com', 'sohar@globelinkww.com'], phones: ['+65 6235 7717'],
+    risk: 2, riskNote: 'Low; wholesale master co-loader; strict 3-day CFS demurrage.', tag: 'Wholesale Master Consolidator — low surcharge exposure on sub-2 CBM cargo', minRT: 1 },
+  { id: 'abreco', name: 'Abreco Freight', rate: 29.00, local: 423.00, baseline: 719.04, p2p: [15, 18], d2d: [22, 26],
+    booking: 'Regional Sales Desk / Manual RFQ', emails: ['business@abrecofreight.com', 'overseas@abrecofreight.com'], phones: ['+971 4 814 9000'],
+    risk: 3, riskNote: 'Border clearance delays at UAE-Oman road border.', tag: 'UAE-based regional consolidator', minRT: 1 },
+  { id: 'ecu', name: 'ECU Worldwide', rate: 31.00, local: 435.00, baseline: 744.56, p2p: [13, 16], d2d: [19, 24],
+    booking: 'ECU360 Digital Spot Platform', emails: ['SalesSingapore@ecuworldwide.com', 'InfoSingapore@ecuworldwide.com'], phones: ['+65 6220 3373'],
+    risk: 1, riskNote: 'Very low; fully itemized digital tariffs.', tag: 'Fully itemised digital tariff — lowest surcharge risk', minRT: 1 },
+  { id: 'shipco', name: 'Shipco Transport', rate: 33.00, local: 443.00, baseline: 761.08, p2p: [14, 17], d2d: [20, 25],
+    booking: 'E-Shipco Web Portal', emails: ['singapore@shipco.com', 'sales@shipco-oman.com'], phones: ['+65 6223 3811', '+968 2479 1939'],
+    risk: 2, riskNote: 'Fixed neutral NVOCC documentation fee; destuffing minimums.', tag: 'Neutral NVOCC with fixed documentation fee', minRT: 1 },
+  { id: 'flg', name: 'Freightcare Logistics (FLG)', rate: 32.00, local: 455.00, baseline: 761.32, p2p: [15, 19], d2d: [22, 27],
+    booking: 'Commercial Desk RFQ', emails: ['info@freightcare.net', 'infokwi@flgshipping.net'], phones: ['+968 2482 6565'],
+    risk: 3, riskNote: 'Muscat linehaul fuel adjustment.', tag: 'Oman-based commercial desk', minRT: 1 },
+  { id: 'mstc', name: 'Muscat Overseas (MSTC)', rate: 35.00, local: 465.00, baseline: 771.60, p2p: [14, 18], d2d: [21, 25],
+    booking: 'Direct RFQ Desk', emails: ['info@majanshipping.com', 'mog@muscatoverseas.com'], phones: ['+968 2116 5700', '+968 2459 3619'],
+    risk: 3, riskNote: 'High origin documentation fee.', tag: 'Local Omani agency with direct RFQ desk', minRT: 1 },
+  { id: 'hellmann', name: 'Hellmann Worldwide Logistics', rate: 38.00, local: 480.00, baseline: 816.88, p2p: [13, 16], d2d: [19, 23],
+    booking: 'Hellmann Portal / Regional Sales', emails: ['info-oman@hellmann.com', 'sales.muscat@hellmann.net'], phones: ['+968 2413 1100'],
+    risk: 2, riskNote: 'Premium tracking & handling markup.', tag: 'Premium tracking & handling', minRT: 1 },
+  { id: 'gac', name: 'Gulf Agency Company (GAC Oman)', rate: 42.00, local: 495.00, baseline: 848.92, p2p: [12, 15], d2d: [18, 22],
+    booking: 'Web Form / Corporate Desk', emails: ['muscat@gac.com', 'sohar@gacworld.com'], phones: ['+968 2447 7800', '+968 9935 1782'],
+    risk: 3, riskNote: 'High delivery order fee, but direct port agency control.', tag: 'Direct port agency control at Sohar — fastest corridor', minRT: 1 },
+  { id: 'aramex', name: 'Aramex Freight', rate: 45.00, local: 500.00, baseline: 864.20, p2p: [15, 18], d2d: [21, 26],
+    booking: 'Aramex Freight Portal', emails: ['sinfreight@aramex.com', 'muscatfreight@aramex.com'], phones: ['+65 6543 0300', '+968 2447 3000'],
+    risk: 3, riskNote: 'Higher CFS devanning and handling pad.', tag: 'Regional network with portal booking', minRT: 1 },
+  { id: 'dsv', name: 'DSV Air & Sea', rate: 48.00, local: 525.00, baseline: 904.48, p2p: [13, 16], d2d: [18, 22],
+    booking: 'myDSV Spot Platform', emails: ['sin@sg.dsv.com', 'elie.beaino@qa.dsv.com'], phones: ['+65 6477 8640', '+968 2412 1104'],
+    risk: 4, riskNote: 'High minimum fees on sub-2 CBM cargo.', tag: 'Global 3PL with fast door-to-door', minRT: 2 },
+  { id: 'dhl', name: 'DHL Global Forwarding', rate: 52.00, local: 550.00, baseline: 951.52, p2p: [12, 15], d2d: [18, 22],
+    booking: 'myDHLi Spot & Book', emails: ['edgsg-sinro-acsseasales@dhl.com', 'Reshna.Sajith@dhl.com'], phones: ['+65 6542 7668', '+968 2447 0300'],
+    risk: 4, riskNote: 'High administrative minimums on small volume.', tag: 'Global forwarder, fastest routing', minRT: 1 },
+  { id: 'kn', name: 'Kuehne + Nagel', rate: 54.00, local: 565.00, baseline: 975.04, p2p: [12, 15], d2d: [18, 22],
+    booking: 'myKN Digital Platform', emails: ['info.singapore@kuehne-nagel.com', 'rayya.al-habsi@kuehne-nagel.com'], phones: ['+65 6337 4701', '+968 2412 4672'],
+    risk: 3, riskNote: 'Elevated origin documentation and CFS receiving tiers.', tag: 'Global digital platform, fastest routing', minRT: 1 },
+  { id: 'maersk', name: 'A.P. Moller - Maersk (LCL)', rate: 58.00, local: 590.00, baseline: 1022.08, p2p: [14, 18], d2d: [20, 25],
+    booking: 'Maersk Spot / LCL Online', emails: ['sg.export@maersk.com', 'om.import@maersk.com', 'sohopsgen@maersk.com'], phones: ['+65 6983 2212', '80074250'],
+    risk: 4, riskNote: 'Primary container line; strict 2 CBM minimum charge and high documentation fee.', tag: 'Primary carrier LCL product', minRT: 2 }
+];
+
+const INCOTERMS = {
+  FOB_DAP: { key: 'FOB_DAP', short: 'FOB SIN → DAP Muscat', title: 'FOB Singapore → DAP Muscat', recommended: true,
+    desc: 'Seller clears origin. Forwarder delivers bundled door-to-door to Muscat. Duty/VAT excluded.',
+    origin: false, bundled: true, destSeparate: false },
+  EXW_CIF: { key: 'EXW_CIF', short: 'EXW → CIF Sohar', title: 'EXW → CIF Sohar',
+    desc: 'Importer absorbs Singapore pickup, CFS receiving and export docs; Sohar clearance and Muscat linehaul billed separately.',
+    origin: true, bundled: false, destSeparate: true },
+  FOB_CIF: { key: 'FOB_CIF', short: 'FOB → CIF Sohar', title: 'FOB → CIF Sohar',
+    desc: 'Seller clears origin; port-terminated at Sohar. Clearance and Muscat linehaul are separate destination liabilities.',
+    origin: false, bundled: false, destSeparate: true }
+};
+
+/* ----------------------------- State ----------------------------- */
+const state = {
+  pallets: CONFIG.BASELINE.pallets,
+  kg: CONFIG.BASELINE.kg,
+  cbm: CONFIG.BASELINE.cbm,
+  dims: { ...CONFIG.BASELINE.dims },
+  invoice: 10000,
+  insPct: 0.5,
+  incoterm: 'FOB_DAP',
+  band: 'mid',
+  applyMin: false,
+  weights: { cost: 50, time: 30, risk: 20 },
+  sort: 'cost',
+  search: '',
+  selectedId: null,
+  userSelected: false,
+  cisf: {},              // id -> { on: bool, amount: number }
+  freeDays: 4,
+  dwell: 6,
+  demBand: 'low',
+  audit: { ocean: 12, strip: 80, doFee: 95 },
+  rfqId: null
+};
+
+/* ----------------------------- Utils ----------------------------- */
+const $ = (id) => document.getElementById(id);
+const usd = (n) => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd0 = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
+const num = (n, d = 2) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mid = (a) => (a[0] + a[1]) / 2;
+const range = (a) => `${a[0]}–${a[1]}`;
+const bandVal = (r) => state.band === 'low' ? r[0] : state.band === 'high' ? r[1] : mid(r);
+const posNum = (v, fallback) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : fallback; };
+const nonNeg = (v, fallback) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : fallback; };
+const refreshIcons = () => { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); };
+
+const safeStore = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (_) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { /* storage unavailable */ } }
+};
+
+/* --------------------------- Core engine -------------------------- */
+function revenueTons() {
+  const wt = state.kg / 1000;
+  return { wt, vol: state.cbm, rt: Math.max(wt, state.cbm), basis: state.cbm >= wt ? 'Volume' : 'Weight' };
+}
+
+function compute(f) {
+  const inc = INCOTERMS[state.incoterm];
+  const rtInfo = revenueTons();
+  const rt = state.applyMin ? Math.max(rtInfo.rt, f.minRT) : rtInfo.rt;
+  const minApplied = state.applyMin && f.minRT > rtInfo.rt;
+
+  const ocean = f.rate * rt;
+  // Residual of the published landed baseline at 1.76 CBM = door delivery & clearance bundle.
+  const bundle = Math.max(0, f.baseline - (f.rate * CONFIG.BASELINE.cbm + f.local));
+
+  const origin = inc.origin
+    ? { pickup: bandVal(CONFIG.ORIGIN.pickup), cfs: bandVal(CONFIG.ORIGIN.cfs), docs: bandVal(CONFIG.ORIGIN.docs) }
+    : { pickup: 0, cfs: 0, docs: 0 };
+  const originTotal = origin.pickup + origin.cfs + origin.docs;
+
+  const dest = inc.destSeparate
+    ? { linehaul: bandVal(CONFIG.DEST.linehaul), clearance: bandVal(CONFIG.DEST.clearance) }
+    : { linehaul: 0, clearance: 0 };
+  const destTotal = dest.linehaul + dest.clearance;
+
+  const bundleCharged = inc.bundled ? bundle : 0;
+  const forwarder = ocean + f.local + bundleCharged;
+  const logistics = forwarder + originTotal + destTotal;
+
+  const insurance = state.invoice * (state.insPct / 100);
+  const cif = state.invoice + originTotal + ocean + insurance;
+  const duty = CONFIG.DUTY_RATE * cif;
+  const vat = CONFIG.VAT_RATE * (cif + duty + BAYAN_USD);
+  const taxes = duty + BAYAN_USD + vat;
+  const total = logistics + taxes;
+
+  const cisf = state.cisf[f.id] || { on: false, amount: 0 };
+
+  return {
+    rt, minApplied, ocean, bundle, bundleCharged, origin, originTotal, dest, destTotal,
+    forwarder, logistics, insurance, cif, duty, bayan: BAYAN_USD, vat, taxes, total,
+    p2pMid: mid(f.p2p), d2dMid: mid(f.d2d), cisf
+  };
+}
+
+function rankAll() {
+  const rows = FREIGHT_DATA.map((f) => ({ f, c: compute(f) }));
+  const costs = rows.map((r) => r.c.total);
+  const times = rows.map((r) => r.c.d2dMid);
+  const [cMin, cMax] = [Math.min(...costs), Math.max(...costs)];
+  const [tMin, tMax] = [Math.min(...times), Math.max(...times)];
+  const w = state.weights;
+  const wSum = (w.cost + w.time + w.risk) || 1;
+
+  rows.forEach((r) => {
+    const cN = cMax === cMin ? 1 : (cMax - r.c.total) / (cMax - cMin);
+    const tN = tMax === tMin ? 1 : (tMax - r.c.d2dMid) / (tMax - tMin);
+    const rN = (4 - r.f.risk) / 3;
+    r.score = 100 * (w.cost * cN + w.time * tN + w.risk * rN) / wSum;
+    r.parts = { cN, tN, rN };
+  });
+
+  const cmp = {
+    cost: (a, b) => a.c.total - b.c.total,
+    time: (a, b) => (a.c.d2dMid - b.c.d2dMid) || (a.c.p2pMid - b.c.p2pMid) || (a.c.total - b.c.total),
+    value: (a, b) => (b.score - a.score) || (a.c.total - b.c.total)
+  }[state.sort];
+  rows.sort(cmp);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+
+  const sortedCosts = [...costs].sort((a, b) => a - b);
+  const median = (sortedCosts[6] + sortedCosts[7]) / 2;
+  return { rows, median, cMin, cMax };
+}
+
+function recommendation(top, ctx) {
+  const { f, c } = top;
+  const rtTxt = `${num(c.rt)} RT`;
+  if (state.sort === 'cost') {
+    return `${f.tag}. Lowest total landed cost at ${rtTxt} — ${usd(c.total)}, ${usd0(ctx.median - c.total)} below the 14-provider median.`;
+  }
+  if (state.sort === 'time') {
+    return `${f.tag}. Fastest door-to-door (${range(f.d2d)} days; ${range(f.p2p)} port-to-port) at ${usd(c.total)} landed.`;
+  }
+  const p = top.parts;
+  const strengths = [];
+  if (p.cN >= 0.7) strengths.push('top-quartile cost');
+  if (p.tN >= 0.6) strengths.push('fast transit');
+  if (p.rN >= 0.66) strengths.push(`${RISK_LABEL[f.risk].toLowerCase()} surcharge risk`);
+  return `${f.tag}. Best value score ${num(top.score, 1)}/100${strengths.length ? ' — ' + strengths.join(', ') : ''} at ${usd(c.total)} landed.`;
+}
+
+/* --------------------------- Rendering ---------------------------- */
+let lastRank = null;
+
+function render() {
+  const ctx = rankAll();
+  lastRank = ctx;
+  const visible = ctx.rows.filter((r) => !state.search || r.f.name.toLowerCase().includes(state.search.toLowerCase()) || r.f.booking.toLowerCase().includes(state.search.toLowerCase()));
+
+  if (!state.userSelected || !FREIGHT_DATA.some((f) => f.id === state.selectedId)) {
+    state.selectedId = ctx.rows[0].f.id;
+  }
+  const sel = ctx.rows.find((r) => r.f.id === state.selectedId);
+
+  renderHeader(ctx);
+  renderRT();
+  renderIncoterms();
+  renderTaxes(sel);
+  renderRecommendation(ctx);
+  renderMatrix(visible, ctx);
+  renderDetail(sel, ctx);
+  renderShield(sel);
+  refreshIcons();
+}
+
+function renderHeader(ctx) {
+  const rt = revenueTons();
+  const best = ctx.rows.reduce((a, b) => (a.c.total < b.c.total ? a : b));
+  const p2p = [Math.min(...FREIGHT_DATA.map((f) => f.p2p[0])), Math.max(...FREIGHT_DATA.map((f) => f.p2p[1]))];
+  const d2d = [Math.min(...FREIGHT_DATA.map((f) => f.d2d[0])), Math.max(...FREIGHT_DATA.map((f) => f.d2d[1]))];
+  $('hdrP2P').textContent = `${range(p2p)} d`;
+  $('hdrD2D').textContent = `${range(d2d)} d`;
+  const chip = (icon, label, val, tone = 'slate') => `
+    <div class="rounded-lg bg-white/5 ring-1 ring-white/10 px-3 py-2">
+      <div class="text-[10px] uppercase tracking-widest text-slate-400 flex items-center gap-1"><i data-lucide="${icon}"></i> ${label}</div>
+      <div class="font-semibold num ${tone === 'em' ? 'text-emerald-300' : 'text-white'}">${val}</div>
+    </div>`;
+  $('headerKpis').innerHTML =
+    chip('boxes', 'Cargo', `${state.pallets} Plt · ${num(state.kg)} kg · ${num(state.cbm)} CBM`) +
+    chip('scale', 'Billable', `${num(rt.rt)} RT (${rt.basis})`) +
+    chip('handshake', 'Incoterm', INCOTERMS[state.incoterm].short) +
+    chip('trophy', 'Best landed', `${usd(best.c.total)}`, 'em');
+}
+
+function renderRT() {
+  const r = revenueTons();
+  const isVol = r.basis === 'Volume';
+  const ratio = r.wt > 0 ? r.vol / r.wt : 0;
+  $('rtBox').innerHTML = `
+    <div class="flex items-center justify-between">
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Billable Revenue Tons (W/M)</div>
+      <span class="tip text-slate-400" tabindex="0" data-tip="RT = max(Gross kg ÷ 1000, Volume CBM). LCL ocean freight is billed on whichever is greater (1 CBM ≡ 1,000 kg)."><i data-lucide="info"></i></span>
+    </div>
+    <div class="mt-1 flex items-end justify-between gap-2">
+      <div class="text-2xl font-bold text-slate-900 num">${num(r.rt)} <span class="text-sm font-medium text-slate-500">RT</span></div>
+      <span class="badge ${isVol ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'}">
+        <i data-lucide="${isVol ? 'box' : 'weight'}"></i> Charged on ${r.basis} (${num(r.rt)} RT)
+      </span>
+    </div>
+    <div class="mt-2 grid grid-cols-2 gap-2 text-xs">
+      <div class="rounded-lg bg-white ring-1 ring-slate-200 px-2 py-1.5 ${!isVol ? 'ring-emerald-400' : ''}">Weight ton <b class="num float-right">${num(r.wt, 3)}</b></div>
+      <div class="rounded-lg bg-white ring-1 ring-slate-200 px-2 py-1.5 ${isVol ? 'ring-indigo-400' : ''}">Measure ton <b class="num float-right">${num(r.vol, 3)}</b></div>
+    </div>
+    <div class="mt-2 text-[11px] text-slate-500">Density ${r.vol > 0 ? num(state.kg / r.vol, 0) : '—'} kg/CBM · ${isVol ? `volumetric cargo (×${num(ratio, 1)} vs weight)` : 'dense cargo'}</div>`;
+
+  const dimsCbm = state.pallets * state.dims.l * state.dims.w * state.dims.h / 1e6;
+  const delta = state.cbm > 0 ? ((dimsCbm - state.cbm) / state.cbm) * 100 : 0;
+  $('dimCheck').innerHTML = `Dims imply <b class="num">${num(dimsCbm, 3)}</b> CBM <span class="${Math.abs(delta) > 5 ? 'text-amber-600' : 'text-emerald-600'}">(${delta >= 0 ? '+' : ''}${num(delta, 1)}%)</span>`;
+}
+
+function renderIncoterms() {
+  $('incotermGroup').innerHTML = Object.values(INCOTERMS).map((inc) => `
+    <button type="button" role="radio" aria-checked="${state.incoterm === inc.key}" data-inc="${inc.key}"
+      class="inc-card w-full text-left rounded-xl border border-slate-200 hover:border-indigo-300 p-3 transition">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-medium text-sm text-slate-900">${inc.title}</span>
+        ${inc.recommended ? '<span class="badge bg-emerald-100 text-emerald-800"><i data-lucide="star"></i> Recommended</span>' : ''}
+      </div>
+      <p class="text-[11px] text-slate-500 mt-1 leading-snug">${inc.desc}</p>
+    </button>`).join('');
+}
+
+function renderTaxes(sel) {
+  const c = sel.c;
+  const inc = INCOTERMS[state.incoterm];
+  $('taxBox').innerHTML = `
+    <div class="text-[11px] text-slate-500 mb-2">Basis: invoice${inc.origin ? ' + EXW origin' : ''} + ocean freight (${esc(sel.f.name)}) + insurance</div>
+    <dl class="space-y-1.5">
+      <div class="flex justify-between"><dt class="text-slate-600">Customs CIF value</dt><dd class="num font-medium">${usd(c.cif)}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-600">Customs duty (5%)</dt><dd class="num">${usd(c.duty)}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-600">Bayan admin fee <span class="text-[11px] text-slate-400">(OMR 15.000)</span></dt><dd class="num">${usd(c.bayan)}</dd></div>
+      <div class="flex justify-between"><dt class="text-slate-600">VAT 5% <span class="text-[11px] text-slate-400">(CIF + Duty + Bayan)</span></dt><dd class="num">${usd(c.vat)}</dd></div>
+      <div class="flex justify-between pt-2 border-t border-slate-200"><dt class="font-semibold text-slate-900">Statutory total</dt><dd class="num font-semibold text-slate-900">${usd(c.taxes)}</dd></div>
+      <div class="flex justify-between text-[11px] text-slate-500"><dt>In OMR</dt><dd class="num">OMR ${num(c.taxes / CONFIG.OMR_USD, 3)}</dd></div>
+    </dl>`;
+}
+
+function renderRecommendation(ctx) {
+  const top = ctx.rows[0];
+  const modeLabel = { cost: 'Lowest Total Cost', time: 'Fastest Transit', value: 'Best Value Score' }[state.sort];
+  $('recBanner').innerHTML = `
+    <div class="rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 p-[1px]">
+      <div class="rounded-[11px] bg-white p-4 flex flex-col md:flex-row md:items-center gap-3">
+        <div class="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-600 to-emerald-600 text-white flex items-center justify-center text-lg shrink-0"><i data-lucide="award"></i></div>
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="badge badge-top"><i data-lucide="crown"></i> Top Recommendation · ${modeLabel}</span>
+            <span class="font-semibold text-slate-900">${esc(top.f.name)}</span>
+          </div>
+          <p class="text-sm text-slate-600 mt-1">${esc(recommendation(top, ctx))}</p>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button data-select="${top.f.id}" class="text-xs font-medium border border-slate-300 hover:bg-slate-50 px-3 py-2 rounded-lg flex items-center gap-1"><i data-lucide="file-search"></i> Breakdown</button>
+          <button data-rfq="${top.f.id}" class="text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg flex items-center gap-1"><i data-lucide="mail-plus"></i> Generate RFQ</button>
+        </div>
+      </div>
+    </div>`;
+  const inc = INCOTERMS[state.incoterm];
+  $('matrixSub').textContent = `${FREIGHT_DATA.length} providers · ${inc.title} · ${num(revenueTons().rt)} RT · ancillary estimate: ${state.band}${state.applyMin ? ' · carrier minimums applied' : ''}`;
+}
+
+function renderMatrix(rows, ctx) {
+  if (!rows.length) {
+    $('matrixBody').innerHTML = `<tr><td colspan="11" class="py-10 text-center text-slate-500 text-sm">No forwarders match “${esc(state.search)}”.</td></tr>`;
+    return;
+  }
+  $('matrixBody').innerHTML = rows.map((r) => {
+    const { f, c } = r;
+    const isTop = r.rank === 1;
+    const sel = f.id === state.selectedId;
+    const delta = c.total - ctx.cMin;
+    const cisfOn = c.cisf.on;
+    return `
+    <tr class="matrix-row border-b border-slate-100 cursor-pointer ${sel ? 'is-selected' : ''}" data-select="${f.id}">
+      <td class="py-3 pl-3 pr-2 align-top">
+        <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${isTop ? 'bg-gradient-to-br from-indigo-600 to-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}">${r.rank}</span>
+      </td>
+      <td class="py-3 px-2 align-top">
+        <div class="font-medium text-slate-900 flex flex-wrap items-center gap-1.5">${esc(f.name)}
+          ${isTop ? '<span class="badge badge-top"><i data-lucide="crown"></i> Top</span>' : ''}
+          ${cisfOn ? '<span class="badge bg-rose-100 text-rose-700"><i data-lucide="flag"></i> CISF</span>' : ''}
+          ${c.minApplied ? `<span class="badge bg-slate-100 text-slate-700 tip" tabindex="0" data-tip="Billed at ${f.minRT} RT carrier minimum">MIN ${f.minRT} RT</span>` : ''}
+        </div>
+        <div class="text-[11px] text-slate-500 mt-0.5">${esc(f.tag)}</div>
+      </td>
+      <td class="py-3 px-2 align-top text-xs text-slate-600 max-w-[160px]">${esc(f.booking)}</td>
+      <td class="py-3 px-2 align-top text-right num">
+        <div>${usd(c.ocean)}</div><div class="text-[11px] text-slate-500">${usd(f.rate)}/RT</div>
+      </td>
+      <td class="py-3 px-2 align-top text-right num">${usd(c.logistics)}</td>
+      <td class="py-3 px-2 align-top text-right num text-slate-600">${usd(c.taxes)}</td>
+      <td class="py-3 px-2 align-top text-right num">
+        <div class="font-semibold text-slate-900">${usd(c.total)}</div>
+        <div class="text-[11px] ${delta < 0.005 ? 'text-emerald-600' : 'text-slate-500'}">${delta < 0.005 ? 'Lowest' : '+' + usd0(delta)}</div>
+      </td>
+      <td class="py-3 px-2 align-top text-xs num">
+        <div><i data-lucide="anchor" class="text-slate-400"></i> ${range(f.p2p)} d</div>
+        <div class="text-slate-500"><i data-lucide="home" class="text-slate-400"></i> ${range(f.d2d)} d</div>
+      </td>
+      <td class="py-3 px-2 align-top"><span class="badge badge-risk-${f.risk} tip" tabindex="0" data-tip="${esc(f.riskNote)}">${RISK_LABEL[f.risk]}</span></td>
+      <td class="py-3 px-2 align-top text-right">
+        <div class="num font-semibold text-slate-900">${num(r.score, 1)}</div>
+        <div class="mt-1 h-1.5 w-16 ml-auto rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-gradient-to-r from-indigo-500 to-emerald-500" style="width:${Math.max(2, r.score).toFixed(1)}%"></div></div>
+      </td>
+      <td class="py-3 pl-2 pr-3 align-top text-right">
+        <button data-rfq="${f.id}" class="text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 whitespace-nowrap"><i data-lucide="mail-plus"></i> RFQ</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDetail(sel, ctx) {
+  const { f, c } = sel;
+  const inc = INCOTERMS[state.incoterm];
+  $('detailHead').innerHTML = `
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div class="min-w-0">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 font-medium">Cost breakdown · Rank #${sel.rank}</div>
+        <h3 class="text-lg font-semibold text-slate-900">${esc(f.name)}</h3>
+        <div class="mt-1 text-xs text-slate-600 space-y-0.5">
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5"><span><i data-lucide="laptop"></i> ${esc(f.booking)}</span><span><i data-lucide="anchor"></i> P2P ${range(f.p2p)} d</span><span><i data-lucide="home"></i> D2D ${range(f.d2d)} d</span></div>
+          <div class="break-all"><i data-lucide="at-sign"></i> ${f.emails.map(esc).join(', ')}</div>
+          <div><i data-lucide="phone"></i> ${f.phones.map(esc).join(' / ')}</div>
+        </div>
+      </div>
+      <div class="text-left sm:text-right shrink-0">
+        <div class="text-[11px] uppercase tracking-wide text-slate-500">Total landed (incl. taxes)</div>
+        <div class="text-2xl font-bold text-slate-900 num">${usd(c.total)}</div>
+        <div class="text-xs text-slate-500 num">Logistics ${usd(c.logistics)} · ${usd(c.logistics / Math.max(state.cbm, 0.01))}/CBM</div>
+        <button data-rfq="${f.id}" class="mt-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg inline-flex items-center gap-1"><i data-lucide="mail-plus"></i> Generate RFQ</button>
+      </div>
+    </div>`;
+
+  // Stacked bar
+  const segs = [
+    { k: 'Ocean freight', v: c.ocean, cls: 'bg-indigo-600' },
+    { k: 'Local charges', v: f.local, cls: 'bg-indigo-400' },
+    { k: 'Door bundle', v: c.bundleCharged, cls: 'bg-sky-400' },
+    { k: 'EXW origin', v: c.originTotal, cls: 'bg-violet-400' },
+    { k: 'Dest. separate', v: c.destTotal, cls: 'bg-amber-400' },
+    { k: 'Duty + Bayan + VAT', v: c.taxes, cls: 'bg-slate-400' }
+  ].filter((s) => s.v > 0.004);
+  const tot = segs.reduce((a, s) => a + s.v, 0) || 1;
+  $('stackBar').innerHTML = `
+    <div class="flex h-3 w-full rounded-full overflow-hidden ring-1 ring-slate-200">${segs.map((s) => `<div class="${s.cls} tip" tabindex="0" data-tip="${s.k}: ${usd(s.v)} (${num(100 * s.v / tot, 1)}%)" style="width:${(100 * s.v / tot).toFixed(2)}%"></div>`).join('')}</div>
+    <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-600">${segs.map((s) => `<span class="inline-flex items-center gap-1"><span class="h-2 w-2 rounded-sm ${s.cls}"></span>${s.k} <b class="num">${num(100 * s.v / tot, 0)}%</b></span>`).join('')}</div>`;
+
+  const chip = (type) => ({
+    seller: '<span class="badge chip-seller">Seller</span>',
+    bundled: '<span class="badge chip-bundled">Importer · forwarder</span>',
+    separate: '<span class="badge chip-separate">Importer · separate</span>',
+    importer: '<span class="badge chip-bundled">Importer</span>',
+    statutory: '<span class="badge bg-slate-800 text-white">Importer · statutory</span>',
+    info: '<span class="badge bg-slate-100 text-slate-500">Valuation only</span>'
+  }[type]);
+
+  const line = (label, type, val, opts = {}) => `
+    <tr class="border-b border-slate-100 ${opts.muted ? 'text-slate-400' : ''}">
+      <td class="py-2 pr-2">${label}${opts.sub ? `<div class="text-[11px] text-slate-500">${opts.sub}</div>` : ''}</td>
+      <td class="py-2 px-2">${chip(type)}</td>
+      <td class="py-2 pl-2 text-right num ${opts.muted ? 'line-through' : ''}">${usd(val)}</td>
+    </tr>`;
+  const subtotal = (label, val, strong) => `
+    <tr class="${strong ? 'bg-indigo-50' : 'bg-slate-50'}">
+      <td class="py-2 pr-2 pl-2 font-semibold ${strong ? 'text-indigo-900' : 'text-slate-900'}" colspan="2">${label}</td>
+      <td class="py-2 pl-2 pr-2 text-right num font-semibold ${strong ? 'text-indigo-900 text-base' : 'text-slate-900'}">${usd(val)}</td>
+    </tr>`;
+
+  const O = CONFIG.ORIGIN, D = CONFIG.DEST;
+  let rows = '';
+  rows += line(`Ocean freight`, 'bundled', c.ocean, { sub: `${usd(f.rate)}/RT × ${num(c.rt)} RT${c.minApplied ? ` (carrier minimum ${f.minRT} RT)` : ''}` });
+  rows += line(`Forwarder local origin/destination charges`, 'bundled', f.local, { sub: 'THC, CFS handling, documentation, DO (as embedded)' });
+  rows += inc.bundled
+    ? line('Door delivery &amp; clearance bundle → Muscat', 'bundled', c.bundle, { sub: 'Baseline residual: landed baseline − (ocean @1.76 CBM + local)' })
+    : line('Door delivery &amp; clearance bundle', 'separate', c.bundle, { muted: true, sub: 'Unbundled under port-terminated CIF Sohar — see separate legs below' });
+
+  if (inc.origin) {
+    rows += line('Singapore pickup trucking', 'separate', c.origin.pickup, { sub: `Range $${range(O.pickup)}` });
+    rows += line('CFS receiving (Jurong)', 'separate', c.origin.cfs, { sub: `Range $${range(O.cfs)}` });
+    rows += line('Export documentation', 'separate', c.origin.docs, { sub: `Range $${range(O.docs)}` });
+  } else {
+    rows += line('Origin trucking, CFS receiving, export docs', 'seller', 0, { sub: 'Borne by seller under FOB Singapore' });
+  }
+  if (inc.destSeparate) {
+    rows += line('Muscat linehaul drayage', 'separate', c.dest.linehaul, { sub: `Range $${range(D.linehaul)} · destination-side liability` });
+    rows += line('Sohar customs clearance', 'separate', c.dest.clearance, { sub: `Range $${range(D.clearance)} · destination-side liability` });
+  }
+  rows += subtotal('Logistics subtotal (importer)', c.logistics);
+  rows += line('Notional insurance', 'info', c.insurance, { sub: `${num(state.insPct, 1)}% of invoice · customs CIF basis only` });
+  rows += line('Customs duty (5% of CIF)', 'statutory', c.duty, { sub: `CIF value ${usd(c.cif)}` });
+  rows += line('Bayan admin fee', 'statutory', c.bayan, { sub: 'OMR 15.000 × 2.60' });
+  rows += line('VAT 5% (CIF + Duty + Bayan)', 'statutory', c.vat);
+  rows += subtotal('Total landed cost', c.total, true);
+  if (c.cisf.on && c.cisf.amount > 0) {
+    rows += `<tr><td colspan="3" class="pt-2 text-xs text-rose-700"><i data-lucide="flag"></i> CISF of ${usd(c.cisf.amount)} flagged on quote — excluded from total and marked for dispute.</td></tr>`;
+  }
+  $('breakdownBody').innerHTML = rows;
+
+  // Responsibility matrix
+  const R = {
+    FOB_DAP: ['seller', 'seller', 'seller', 'bundled', 'bundled', 'bundled', 'statutory'],
+    EXW_CIF: ['separate', 'separate', 'separate', 'bundled', 'separate', 'separate', 'statutory'],
+    FOB_CIF: ['seller', 'seller', 'seller', 'bundled', 'separate', 'separate', 'statutory']
+  }[state.incoterm];
+  const acts = [
+    ['Singapore origin trucking', inc.origin ? `$${range(O.pickup)}` : 'Supplier delivers to CFS'],
+    ['CFS receiving (Jurong)', inc.origin ? `$${range(O.cfs)}` : 'Included in FOB price'],
+    ['Export documentation & customs', inc.origin ? `$${range(O.docs)}` : 'Seller files export permit'],
+    ['Ocean freight + forwarder local charges', `${usd(c.ocean + f.local)} via ${f.name.split(' ')[0]}`],
+    ['Sohar customs clearance (Bayan filing)', inc.destSeparate ? `$${range(D.clearance)} separate broker` : 'Inside door bundle'],
+    ['Muscat linehaul delivery', inc.destSeparate ? `$${range(D.linehaul)} separate haulier` : 'Inside door bundle'],
+    ['Duty 5% + VAT 5% + Bayan', 'Never in forwarder quote']
+  ];
+  $('respBody').innerHTML = acts.map((a, i) => `
+    <tr class="border-b border-slate-100">
+      <td class="py-2 pr-2">${a[0]}</td>
+      <td class="py-2 px-2">${chip(R[i])}</td>
+      <td class="py-2 pl-2 text-xs text-slate-500">${esc(a[1])}</td>
+    </tr>`).join('');
+}
+
+function renderShield(sel) {
+  const { f, c } = sel;
+  const tone = { 1: 'emerald', 2: 'emerald', 3: 'amber', 4: 'rose' }[f.risk];
+  $('riskNote').innerHTML = `
+    <div class="rounded-xl border border-${tone}-200 bg-${tone}-50 p-3 flex items-start gap-2">
+      <i data-lucide="${f.risk >= 3 ? 'alert-octagon' : 'shield-check'}" class="text-${tone}-600 mt-0.5"></i>
+      <div class="text-xs">
+        <div class="font-semibold text-${tone}-900">${esc(f.name)} · ${RISK_LABEL[f.risk]} surcharge risk</div>
+        <div class="text-${tone}-800 mt-0.5">${esc(f.riskNote)}</div>
+      </div>
+    </div>`;
+
+  // CFS trap audit
+  const rt = revenueTons().rt;
+  const a = state.audit;
+  const auditTotal = (a.ocean + a.strip) * rt + a.doFee;
+  const benchmark = c.ocean + f.local;
+  const trap = a.ocean <= 15 && a.strip >= 60;
+  const destShare = auditTotal > 0 ? ((a.strip * rt + a.doFee) / auditTotal) * 100 : 0;
+  $('auditOut').innerHTML = `
+    <div class="flex items-start gap-2 ${trap ? 'text-rose-700' : 'text-emerald-700'} font-medium">
+      <i data-lucide="${trap ? 'siren' : 'check-circle-2'}" class="mt-0.5"></i>
+      <span>${trap ? 'Trap pattern detected: cheap ocean rate offset by destination stripping.' : 'No handover-trap pattern on these inputs.'}</span>
+    </div>
+    <div class="mt-1.5 grid grid-cols-2 gap-2 text-amber-900">
+      <div>Effective quote: <b class="num">${usd(auditTotal)}</b></div>
+      <div>Destination share: <b class="num">${num(destShare, 0)}%</b></div>
+      <div class="col-span-2">vs ${esc(f.name.split(' (')[0])} ocean + local: <b class="num">${usd(benchmark)}</b>
+        <span class="${auditTotal < benchmark ? 'text-emerald-700' : 'text-rose-700'}">(${auditTotal < benchmark ? '−' : '+'}${usd(Math.abs(auditTotal - benchmark))})</span></div>
+    </div>`;
+
+  // Free time clock
+  const days = Math.max(state.dwell, state.freeDays + 1, 7);
+  const cells = [];
+  for (let d = 1; d <= Math.min(days, 21); d++) {
+    const free = d <= state.freeDays;
+    const used = d <= state.dwell;
+    let cls = 'bg-slate-100 text-slate-400';
+    if (used && free) cls = 'bg-emerald-500 text-white';
+    else if (used && !free) cls = 'bg-rose-500 text-white';
+    else if (free) cls = 'bg-emerald-100 text-emerald-700';
+    cells.push(`<div class="day-cell ${cls}" title="Day ${d}${free ? ' · free' : ' · demurrage'}">D${d}</div>`);
+  }
+  $('clockGrid').innerHTML = cells.join('');
+  const rate = CONFIG.DEMURRAGE[state.demBand];
+  const charged = Math.max(0, state.dwell - state.freeDays);
+  const chargeVol = Math.max(state.cbm, 1);
+  const dem = charged * rate * chargeVol;
+  const daysLeft = state.freeDays - state.dwell;
+  $('clockOut').innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <span class="${charged > 0 ? 'text-rose-700' : 'text-emerald-700'} font-medium flex items-center gap-1">
+        <i data-lucide="${charged > 0 ? 'hourglass' : 'timer'}"></i>
+        ${charged > 0 ? `${charged} chargeable day${charged > 1 ? 's' : ''} past free time` : `${daysLeft} free day${daysLeft === 1 ? '' : 's'} of buffer remaining`}
+      </span>
+      <span class="num font-semibold ${charged > 0 ? 'text-rose-700' : 'text-slate-900'}">${usd(dem)}</span>
+    </div>
+    <div class="text-[11px] text-slate-500 mt-1">${usd(rate)}/CBM/day × ${num(chargeVol)} CBM${state.cbm < 1 ? ' (1 CBM minimum)' : ''}${f.id === 'cwt' ? ' · Note: CWT enforces a strict 3-day CFS free time.' : ''}</div>`;
+
+  // CISF
+  $('cisfName').textContent = f.name;
+  const cs = state.cisf[f.id] || { on: false, amount: 45 };
+  $('inCisf').checked = !!cs.on;
+  $('cisfAmtWrap').classList.toggle('hidden', !cs.on);
+  if (document.activeElement !== $('inCisfAmt')) $('inCisfAmt').value = cs.amount ?? 45;
+  $('cisfOut').innerHTML = cs.on
+    ? `<div class="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-rose-800 flex items-start gap-2"><i data-lucide="octagon-x" class="mt-0.5"></i><span><b>Unauthorised fee flagged.</b> A China/Asia Import Service Fee has no basis on a Singapore-origin LCL shipment to Oman. Reject the line item before booking and cite the RFQ's capped-fee clause. Disputed amount: <b class="num">${usd(cs.amount)}</b>.</span></div>`
+    : `<div class="text-slate-500 flex items-center gap-1.5"><i data-lucide="check"></i> No CISF line flagged for this forwarder.</div>`;
+}
+
+/* --------------------------- RFQ engine --------------------------- */
+function buildRfq(f) {
+  const r = revenueTons();
+  const c = compute(f);
+  const inc = INCOTERMS[state.incoterm];
+  const days = Math.max(1, parseInt($('rqDays').value, 10) || 3);
+  const due = new Date(Date.now() + days * 864e5).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+  const name = $('rqName').value.trim() || 'Procurement Team';
+  const company = $('rqCompany').value.trim();
+  const d = state.dims;
+  const specs = `${state.pallets} Plt / ${num(state.kg)} kg / ${num(state.cbm)} CBM`;
+
+  const subject = `RFQ: LCL Sea Freight - Singapore to Sohar/Muscat - ${specs} - Non-Hazardous Pneumatic Equipment`;
+
+  const originScope = inc.origin
+    ? '   a) Origin: pickup from supplier premises (Singapore), CFS receiving at Jurong, export documentation & permit'
+    : '   a) Origin: N/A (FOB Singapore - supplier delivers to your nominated CFS with export clearance)';
+  const destScope = inc.bundled
+    ? '   e) Destination: Sohar/PSQ customs clearance (Bayan filing) and delivery to consignee door in Muscat, all-in'
+    : '   e) Destination: please quote Sohar customs clearance and Muscat linehaul delivery as separate optional lines';
+
+  const body =
+`Dear ${f.name} Sales / Pricing Team,
+
+We are requesting your best LCL sea freight quotation for the shipment below. Please reply to all addresses in this email.
+
+1. ROUTING
+   - Origin: Port of Singapore / Jurong CFS, Singapore
+   - Port of discharge: Sohar Port or Port Sultan Qaboos, Oman
+   - Final delivery: Muscat, Oman
+   - Requested Incoterm / scope: ${inc.title}
+   - Service: LCL consolidation; direct service preferred. Please declare any transshipment via Jebel Ali / JAFZA and the associated cross-dock charges.
+
+2. CARGO SPECIFICATION
+   - Commodity: Industrial pneumatic equipment - valves, cylinders, actuators and tubing (non-hazardous machinery parts, not DG)
+   - Packaging: ${state.pallets} pallet${state.pallets > 1 ? 's' : ''}, ${d.l} x ${d.w} x ${d.h} cm each, ISPM-15 heat-treated and stamped
+   - Gross weight: ${num(state.kg)} kg
+   - Volume: ${num(state.cbm)} CBM
+   - Chargeable: ${num(r.rt)} RT (W/M, charged on ${r.basis.toLowerCase()})
+   - HS codes:
+${HS_CODES.map((h) => `       ${h.code}  ${h.desc}`).join('\n')}
+
+3. QUOTATION FORMAT - PLEASE ITEMISE
+${originScope}
+   b) Ocean freight per W/M, and your minimum chargeable RT
+   c) All surcharges (BAF/LSS/PSS/ENS etc.) with validity dates
+   d) Destination local charges: Delivery Order fee, CFS devanning/stripping per CBM, THC, port handling
+${destScope}
+   f) Port-to-port and door-to-door transit times, next two sailings and CFS cut-off
+
+4. CONTRACTUAL CONDITIONS
+   - Destination Delivery Order fee and CFS devanning/stripping fees to be CAPPED at the amounts quoted. No post-arrival additions will be accepted unless approved in writing before arrival.
+   - Minimum ${state.freeDays} calendar days free time at Sohar CFS; please state the per-CBM daily storage tariff thereafter.
+   - No China/Asia Import Service Fee (CISF) or similar unagreed surcharges will be accepted.
+   - Quotation validity: minimum 30 days.
+   - Oman customs duty (5%), VAT (5%) and the Bayan fee will be settled by the consignee; please exclude them from the logistics quote.
+
+For reference, our current budget benchmark for this scope is approximately ${usd0(c.logistics)} all-in logistics.
+
+Please send your quotation by ${due}.
+
+Best regards,
+${name}${company ? '\n' + company : ''}`;
+
+  return { to: f.emails.join(', '), subject, body };
+}
+
+function updateMailto() {
+  const to = $('rqTo').value.split(',').map((s) => s.trim()).filter(Boolean).join(',');
+  $('rqMailto').href = `mailto:${to}?subject=${encodeURIComponent($('rqSubject').value)}&body=${encodeURIComponent($('rqBody').value)}`;
+}
+
+function fillRfq() {
+  const f = FREIGHT_DATA.find((x) => x.id === state.rfqId);
+  if (!f) return;
+  const rfq = buildRfq(f);
+  $('rqTo').value = rfq.to;
+  $('rqSubject').value = rfq.subject;
+  $('rqBody').value = rfq.body;
+  $('rfqSub').textContent = `${f.name} · ${f.booking} · ${f.phones.join(' / ')}`;
+  updateMailto();
+}
+
+let lastFocus = null;
+function openRfq(id) {
+  state.rfqId = id;
+  const saved = safeStore.get('fp_requester', {});
+  $('rqName').value = saved.name || '';
+  $('rqCompany').value = saved.company || '';
+  fillRfq();
+  $('rqStatus').textContent = '';
+  lastFocus = document.activeElement;
+  const m = $('rfqModal');
+  m.classList.remove('hidden');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  refreshIcons();
+  setTimeout(() => $('rqBody').focus(), 50);
+}
+function closeRfq() {
+  const m = $('rfqModal');
+  m.classList.add('hidden');
+  m.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+async function copyRfq() {
+  const text = `To: ${$('rqTo').value}\nSubject: ${$('rqSubject').value}\n\n${$('rqBody').value}`;
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; }
+  } catch (_) { ok = false; }
+  if (!ok) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+    document.body.removeChild(ta);
+  }
+  $('rqStatus').textContent = ok ? '✓ Copied to clipboard' : 'Copy failed — select the text manually';
+  $('rqStatus').className = `text-xs font-medium ${ok ? 'text-emerald-700' : 'text-rose-700'}`;
+}
+
+/* ----------------------------- CSV ------------------------------- */
+function exportCsv() {
+  const ctx = lastRank || rankAll();
+  const head = ['Rank', 'Forwarder', 'Incoterm', 'Billable RT', 'Ocean $/RT', 'Ocean', 'Local', 'Door bundle', 'EXW origin', 'Dest separate', 'Logistics', 'CIF value', 'Duty', 'Bayan', 'VAT', 'Total landed', 'P2P days', 'D2D days', 'Risk', 'Value score', 'CISF flagged', 'Emails'];
+  const lines = [head];
+  ctx.rows.forEach((r) => {
+    const { f, c } = r;
+    lines.push([r.rank, f.name, INCOTERMS[state.incoterm].title, c.rt.toFixed(3), f.rate.toFixed(2), c.ocean.toFixed(2), f.local.toFixed(2), c.bundleCharged.toFixed(2),
+      c.originTotal.toFixed(2), c.destTotal.toFixed(2), c.logistics.toFixed(2), c.cif.toFixed(2), c.duty.toFixed(2), c.bayan.toFixed(2), c.vat.toFixed(2), c.total.toFixed(2),
+      range(f.p2p), range(f.d2d), RISK_LABEL[f.risk], r.score.toFixed(1), c.cisf.on ? 'YES' : 'no', f.emails.join('; ')]);
+  });
+  const csv = lines.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `freightprocure_sin-omn_${state.sort}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* --------------------------- Event wiring ------------------------- */
+function setPressed(groupId, attr, value) {
+  document.querySelectorAll(`#${groupId} [data-${attr}]`).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
+}
+
+function syncInputs() {
+  $('inPallets').value = state.pallets;
+  $('inKg').value = state.kg;
+  $('inCbm').value = state.cbm;
+  $('inL').value = state.dims.l; $('inW').value = state.dims.w; $('inH').value = state.dims.h;
+}
+
+function bind() {
+  const onNum = (id, fn) => $(id).addEventListener('input', (e) => { fn(e.target.value); render(); });
+
+  onNum('inPallets', (v) => { state.pallets = Math.max(1, Math.round(posNum(v, state.pallets))); });
+  onNum('inKg', (v) => { state.kg = posNum(v, state.kg); });
+  onNum('inCbm', (v) => { state.cbm = posNum(v, state.cbm); });
+  onNum('inL', (v) => { state.dims.l = posNum(v, state.dims.l); });
+  onNum('inW', (v) => { state.dims.w = posNum(v, state.dims.w); });
+  onNum('inH', (v) => { state.dims.h = posNum(v, state.dims.h); });
+  onNum('inInvoice', (v) => { state.invoice = nonNeg(v, state.invoice); });
+  onNum('inIns', (v) => { state.insPct = Math.min(5, nonNeg(v, state.insPct)); });
+
+  $('btnPreset').addEventListener('click', () => {
+    state.pallets = CONFIG.BASELINE.pallets; state.kg = CONFIG.BASELINE.kg; state.cbm = CONFIG.BASELINE.cbm;
+    state.dims = { ...CONFIG.BASELINE.dims };
+    syncInputs(); render();
+  });
+  $('btnApplyDims').addEventListener('click', () => {
+    state.cbm = +(state.pallets * state.dims.l * state.dims.w * state.dims.h / 1e6).toFixed(3);
+    syncInputs(); render();
+  });
+
+  $('incotermGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-inc]'); if (!b) return;
+    state.incoterm = b.dataset.inc; render();
+  });
+  $('bandGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-band]'); if (!b) return;
+    state.band = b.dataset.band; setPressed('bandGroup', 'band', state.band); render();
+  });
+  $('inMin').addEventListener('change', (e) => { state.applyMin = e.target.checked; render(); });
+
+  [['wCost', 'cost'], ['wTime', 'time'], ['wRisk', 'risk']].forEach(([id, k]) => {
+    $(id).addEventListener('input', (e) => { state.weights[k] = +e.target.value; $(id + 'Lbl').textContent = e.target.value; render(); });
+  });
+
+  $('sortGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sort]'); if (!b) return;
+    state.sort = b.dataset.sort; state.userSelected = false; setPressed('sortGroup', 'sort', state.sort); render();
+  });
+  $('inSearch').addEventListener('input', (e) => { state.search = e.target.value.trim(); render(); });
+  $('btnCsv').addEventListener('click', exportCsv);
+
+  // Delegated: select rows / open RFQ
+  document.addEventListener('click', (e) => {
+    const rfq = e.target.closest('[data-rfq]');
+    if (rfq) { e.stopPropagation(); openRfq(rfq.dataset.rfq); return; }
+    const sel = e.target.closest('[data-select]');
+    if (sel) {
+      state.selectedId = sel.dataset.select; state.userSelected = true; render();
+      if (sel.tagName === 'BUTTON' && window.innerWidth < 1536) $('panelC').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+
+  // Shield
+  onNum('auOcean', (v) => { state.audit.ocean = nonNeg(v, state.audit.ocean); });
+  onNum('auStrip', (v) => { state.audit.strip = nonNeg(v, state.audit.strip); });
+  onNum('auDo', (v) => { state.audit.doFee = nonNeg(v, state.audit.doFee); });
+  $('inFree').addEventListener('change', (e) => { state.freeDays = +e.target.value; render(); });
+  $('inDwell').addEventListener('input', (e) => { state.dwell = +e.target.value; $('dwellLbl').textContent = e.target.value; render(); });
+  $('demBandGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dem]'); if (!b) return;
+    state.demBand = b.dataset.dem; setPressed('demBandGroup', 'dem', state.demBand); render();
+  });
+  $('inCisf').addEventListener('change', (e) => {
+    const id = state.selectedId;
+    const prev = state.cisf[id] || { on: false, amount: nonNeg($('inCisfAmt').value, 45) };
+    state.cisf[id] = { ...prev, on: e.target.checked };
+    render();
+  });
+  $('inCisfAmt').addEventListener('input', (e) => {
+    const id = state.selectedId;
+    state.cisf[id] = { on: true, amount: nonNeg(e.target.value, 0) };
+    render();
+  });
+
+  // Modal
+  $('rfqModal').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeRfq(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('rfqModal').classList.contains('hidden')) closeRfq(); });
+  ['rqName', 'rqCompany', 'rqDays'].forEach((id) => $(id).addEventListener('input', () => {
+    safeStore.set('fp_requester', { name: $('rqName').value, company: $('rqCompany').value });
+    fillRfq();
+  }));
+  ['rqTo', 'rqSubject', 'rqBody'].forEach((id) => $(id).addEventListener('input', updateMailto));
+  $('rqCopy').addEventListener('click', copyRfq);
+}
+
+function init() {
+  $('hsChips').innerHTML = HS_CODES.map((h) => `<span class="tip badge bg-white/10 text-slate-200 ring-1 ring-white/15 font-mono" tabindex="0" data-tip="${esc(h.desc)}">${h.code}</span>`).join('');
+  syncInputs();
+  bind();
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
